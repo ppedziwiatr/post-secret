@@ -235,10 +235,10 @@
     <div id="rerr" class="err hidden"></div>
   </div>
 
-  <details style="margin-top:80px;padding-top:32px;border-top:1px solid var(--border);font-size:15px;line-height:1.8;color:var(--muted)">
-    <summary style="cursor:pointer;color:var(--fg);font-size:1rem;font-weight:600;list-style:none;user-select:none">How it works ↓</summary>
+  <section style="margin-top:80px;padding-top:32px;border-top:1px solid var(--border);font-size:15px;line-height:1.8;color:var(--muted)">
+    <h2 style="font-size:1rem;color:var(--fg);margin-bottom:16px">How it works</h2>
 
-    <p style="margin-top:16px"><strong style="color:var(--fg)">Encryption happens in your browser.</strong> The secret never leaves your device in plaintext. We use AES-256-GCM via the browser's native <code>WebCrypto</code> API — no third-party crypto libraries.</p>
+    <p><strong style="color:var(--fg)">Encryption happens in your browser.</strong> The secret never leaves your device in plaintext. We use AES-256-GCM via the browser's native <code>WebCrypto</code> API — no third-party crypto libraries.</p>
 
     <p style="margin-top:12px"><strong style="color:var(--fg)">The server is dumb.</strong> It stores an opaque encrypted blob, returns a random ID, and deletes it on first read. It never sees the key, never sees the plaintext. Even a compromised server leaks nothing useful.</p>
 
@@ -247,7 +247,7 @@
     <p style="margin-top:12px"><strong style="color:var(--fg)">Hosted on IPFS.</strong> The frontend is a single static file pinned to IPFS. Its CID (content hash) is a cryptographic commitment to the exact code you're running — it's impossible to silently modify. You can verify it yourself: <code>ipfs add --only-hash index.html</code>. Traditional web hosting gives you no such guarantee.</p>
 
     <p style="margin-top:12px"><strong style="color:var(--fg)">Zero dependencies.</strong> The entire app is one HTML file. The server is 70 lines of Node.js using only built-in modules. Less code, smaller attack surface, easy to audit.</p>
-  </details>
+  </section>
 
   <footer style="margin-top:32px">
     <a href="https://github.com/koonopek/post-secret">Source</a>
@@ -303,8 +303,9 @@
 
     if (!parsed) {
       const base = location.origin + location.pathname;
-      $('cli').textContent =
-        `SECRET='your-secret-here' API='${API}' BASE='${base}' node -e "(async()=>{const c=require('crypto'),k=c.randomBytes(32),iv=c.randomBytes(12),ci=c.createCipheriv('aes-256-gcm',k,iv),ct=Buffer.concat([ci.update(process.env.SECRET,'utf8'),ci.final()]),payload=Buffer.concat([iv,ct,ci.getAuthTag()]).toString('base64url'),key=k.toString('base64url'),{id}=await(await fetch(process.env.API+'/create',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ciphertext:payload})})).json();console.log('Link:     '+process.env.BASE+'#'+id+'\\nKey:      '+key+'\\nCombined: '+process.env.BASE+'#'+id+'|'+key);})()"`,
+      const cliScript = s => `SECRET='${s||'your-secret-here'}' API='${API}' BASE='${base}' node -e "(async()=>{const c=require('crypto'),k=c.randomBytes(32),iv=c.randomBytes(12),ci=c.createCipheriv('aes-256-gcm',k,iv),ct=Buffer.concat([ci.update(process.env.SECRET,'utf8'),ci.final()]),payload=Buffer.concat([iv,ct,ci.getAuthTag()]).toString('base64url'),key=k.toString('base64url'),{id}=await(await fetch(process.env.API+'/create',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ciphertext:payload})})).json();console.log('Link:     '+process.env.BASE+'#'+id+'\\nKey:      '+key+'\\nCombined: '+process.env.BASE+'#'+id+'|'+key);})()"`;
+      $('cli').textContent = cliScript();
+      $('secret').addEventListener('input', () => $('cli').textContent = cliScript($('secret').value.trim()));
 
       $('go').onclick = async () => {
         const secret = $('secret').value.trim(); if (!secret) return;

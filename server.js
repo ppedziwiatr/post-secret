@@ -6,18 +6,35 @@ const http = require('node:http');
 const crypto = require('node:crypto');
 
 const PORT = parseInt(process.env.PORT || '3000', 10);
-const MAX_CIPHERTEXT_BYTES = 64 * 1024; // 64 KB
-const DEFAULT_TTL = 86400;              // 24 hours
-const MAX_TTL = 7 * 86400;             // 7 days
+const MAX_CIPHERTEXT_BYTES = 64 * 1024;       // 64 KB per secret
+const MAX_IP_STORE_BYTES = 1024 * 1024;       // 1 MB per IP
+const DEFAULT_TTL = 86400;                     // 24 hours
+const MAX_TTL = 7 * 86400;                    // 7 days
 
-// In-memory store: id -> { ciphertext, expiresAt }
+// In-memory store: id -> { ciphertext, expiresAt, bytes, ip }
 const store = new Map();
+// Per-IP byte accounting: ip -> total bytes currently stored
+const ipBytes = new Map();
+
+function getIp(req) {
+  // fly-client-ip is set by Fly.io's proxy and cannot be spoofed by clients
+  return req.headers['fly-client-ip'] || req.socket.remoteAddress || 'unknown';
+}
+
+function adjustIpBytes(ip, delta) {
+  const next = (ipBytes.get(ip) || 0) + delta;
+  if (next <= 0) ipBytes.delete(ip);
+  else ipBytes.set(ip, next);
+}
 
 // Sweep expired entries every 5 minutes
 setInterval(() => {
   const now = Date.now();
   for (const [id, entry] of store) {
-    if (entry.expiresAt < now) store.delete(id);
+    if (entry.expiresAt < now) {
+      adjustIpBytes(entry.ip, -entry.bytes);
+      store.delete(id);
+    }
   }
 }, 5 * 60 * 1000).unref();
 
@@ -44,6 +61,7 @@ function readBody(req) {
     req.on('data', chunk => {
       size += chunk.length;
       if (size > MAX_CIPHERTEXT_BYTES + 512) {
+        req.destroy();
         reject(new Error('Payload too large'));
       } else {
         chunks.push(chunk);
@@ -77,8 +95,13 @@ const server = http.createServer(async (req, res) => {
     if (typeof ciphertext !== 'string' || ciphertext.length === 0) {
       return send(res, 400, { error: 'ciphertext is required' });
     }
-    if (Buffer.byteLength(ciphertext) > MAX_CIPHERTEXT_BYTES) {
+    const ctBytes = Buffer.byteLength(ciphertext);
+    if (ctBytes > MAX_CIPHERTEXT_BYTES) {
       return send(res, 413, { error: 'ciphertext exceeds 64 KB limit' });
+    }
+    const ip = getIp(req);
+    if ((ipBytes.get(ip) || 0) + ctBytes > MAX_IP_STORE_BYTES) {
+      return send(res, 429, { error: 'Storage limit reached — read or wait for your existing secrets to expire' });
     }
 
     const ttlSec = Math.min(
@@ -87,7 +110,8 @@ const server = http.createServer(async (req, res) => {
     );
 
     const id = crypto.randomUUID();
-    store.set(id, { ciphertext, expiresAt: Date.now() + ttlSec * 1000 });
+    store.set(id, { ciphertext, expiresAt: Date.now() + ttlSec * 1000, bytes: ctBytes, ip });
+    adjustIpBytes(ip, ctBytes);
     return send(res, 201, { id });
   }
 
@@ -98,11 +122,13 @@ const server = http.createServer(async (req, res) => {
     const entry = store.get(id);
 
     if (!entry || entry.expiresAt < Date.now()) {
+      if (entry) adjustIpBytes(entry.ip, -entry.bytes);
       store.delete(id);
       return send(res, 404, { error: 'Secret not found or already read' });
     }
 
-    const { ciphertext } = entry;
+    const { ciphertext, bytes, ip } = entry;
+    adjustIpBytes(ip, -bytes);
     store.delete(id); // burn after reading
     return send(res, 200, { ciphertext });
   }
