@@ -217,7 +217,12 @@
   </div>
 
   <div id="receiver" class="hidden">
-    <div id="rloading">Fetching…</div>
+    <div id="rreveal">
+      <p style="margin-bottom:12px;color:var(--muted);font-size:15px">You have received a secret. Click to fetch and decrypt it — this will delete it from the server.</p>
+      <button id="reveal-btn">Reveal secret</button>
+    </div>
+
+    <div id="rloading" class="hidden">Fetching…</div>
 
     <div id="rform" class="hidden">
       <label>Decryption key
@@ -321,7 +326,10 @@
 
     } else {
       $('sender').classList.add('hidden'); $('receiver').classList.remove('hidden');
-      (async () => {
+
+      $('reveal-btn').onclick = async () => {
+        $('rreveal').classList.add('hidden'); $('rloading').classList.remove('hidden');
+
         let ct;
         try {
           const r = await fetch(`${API}/secret/${parsed.id}`);
@@ -343,7 +351,7 @@
         setTimeout(() => $('keyinput').focus(), 50);
         $('dec').onclick = () => {const k = $('keyinput').value.trim(); if (k) tryDecrypt(k);};
         $('keyinput').addEventListener('keydown', e => e.key === 'Enter' && $('dec').click());
-      })();
+      };
     }
 
     function showErr(msg) {
