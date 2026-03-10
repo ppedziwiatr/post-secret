@@ -42,22 +42,7 @@ docker run -p 3000:3000 post-secret
 Encrypt from the command line (requires Node.js):
 
 ```bash
-SECRET='your-secret-here'
-RESULT=$(SECRET="$SECRET" node -e "
-  const c=require('crypto'),k=c.randomBytes(32),iv=c.randomBytes(12);
-  const ci=c.createCipheriv('aes-256-gcm',k,iv);
-  const ct=Buffer.concat([ci.update(process.env.SECRET,'utf8'),ci.final()]);
-  const tag=ci.getAuthTag();
-  const payload=Buffer.concat([iv,ct,tag]).toString('base64url');
-  console.log(k.toString('base64url')+'|'+payload);
-")
-KEY=${RESULT%|*}
-CT=${RESULT#*|}
-ID=$(curl -s -X POST https://send-secret.fly.dev/create \
-  -H 'Content-Type: application/json' \
-  -d "{\"ciphertext\":\"$CT\"}" | grep -o '"id":"[^"]*' | cut -d'"' -f4)
-echo "Link: https://your-ipfs-url/#$ID"
-echo "Key:  $KEY"
+SECRET='your-secret-here' API='https://send-secret.fly.dev' BASE='https://your-ipfs-url/' node -e "(async()=>{const c=require('crypto'),k=c.randomBytes(32),iv=c.randomBytes(12),ci=c.createCipheriv('aes-256-gcm',k,iv),ct=Buffer.concat([ci.update(process.env.SECRET,'utf8'),ci.final()]),payload=Buffer.concat([iv,ct,ci.getAuthTag()]).toString('base64url'),key=k.toString('base64url'),{id}=await(await fetch(process.env.API+'/create',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ciphertext:payload})})).json();console.log('Link:     '+process.env.BASE+'#'+id+'\nKey:      '+key+'\nCombined: '+process.env.BASE+'#'+id+'|'+key);})()"
 ```
 
 ## API
