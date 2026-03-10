@@ -285,13 +285,6 @@
     }
 
     const $ = id => document.getElementById(id);
-    function cp(id, btn) {
-      const el = $(id), text = el.tagName === 'TEXTAREA' ? el.value : el.textContent;
-      navigator.clipboard.writeText(text).then(() => {
-        const t = btn.textContent; btn.textContent = 'Copied!';
-        setTimeout(() => btn.textContent = t, 2000);
-      });
-    }
 
     function parseHash() {
       const f = location.hash.slice(1); if (!f) return null;
