@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>Post Secret</title>
+    <style>
+        :root {
+            --mono: 'Cascadia Code', 'Consolas', 'JetBrains Mono', ui-monospace, monospace
+        }
+
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --bg: #141414;
+                --fg: #d4d4d4;
+                --muted: #666;
+                --code: #1e1e1e;
+                --border: #333
+            }
+        }
+
+        @media (prefers-color-scheme: light) {
+            :root {
+                --bg: #fff;
+                --fg: #1a1a1a;
+                --muted: #888;
+                --code: #f3f3f3;
+                --border: #ddd
+            }
+        }
+
+        body {
+            max-width: 700px;
+            margin: 56px auto;
+            padding: 0 24px;
+            font-size: 19px;
+            line-height: 1.7;
+            font-family: var(--mono);
+            background: var(--bg);
+            color: var(--fg)
+        }
+
+        h1 {
+            font-size: 1.5rem;
+            margin-bottom: 4px
+        }
+
+        p {
+            font-size: 17px;
+            color: var(--muted)
+        }
+
+        label {
+            display: block;
+            margin-top: 20px;
+            font-size: 15px;
+            color: var(--muted);
+            margin-bottom: 4px
+        }
+
+        textarea,
+        input {
+            width: 100%;
+            font-family: var(--mono);
+            font-size: 17px;
+            padding: 10px 12px;
+            background: var(--code);
+            color: var(--fg);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            outline: none;
+        }
+
+        select {
+            font-family: var(--mono);
+            font-size: 16px;
+            padding: 9px 14px;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            outline: none;
+            background: var(--code);
+            color: var(--muted);
+            cursor: pointer;
+        }
+
+        textarea {
+            resize: vertical;
+            min-height: 120px;
+            line-height: 1.6
+        }
+
+        textarea:focus,
+        input:focus {
+            border-color: var(--muted)
+        }
+
+        button {
+            font-family: var(--mono);
+            font-size: 16px;
+            cursor: pointer;
+            padding: 9px 20px;
+            border-radius: 6px;
+            border: 1px solid var(--border);
+            background: var(--code);
+            color: var(--fg);
+            margin-top: 10px;
+            transition: opacity .15s;
+        }
+
+        button:hover:not(:disabled) {
+            opacity: .75
+        }
+
+        button:disabled {
+            opacity: .35;
+            cursor: not-allowed
+        }
+
+        pre {
+            font-family: var(--mono);
+            font-size: 14px;
+            background: var(--code);
+            color: var(--muted);
+            padding: 14px 16px;
+            border-radius: 6px;
+            overflow-x: auto;
+            white-space: pre;
+            border: 1px solid var(--border)
+        }
+
+        #result,
+        #receiver,
+        .err {
+            margin-top: 28px
+        }
+
+        .row {
+            display: flex;
+            gap: 12px;
+            align-items: baseline;
+            margin: 10px 0
+        }
+
+        .row span {
+            font-size: 13px;
+            color: var(--muted);
+            min-width: 32px;
+            flex-shrink: 0;
+        }
+
+        .row code {
+            word-break: break-all;
+            font-size: 15px;
+            flex: 1;
+            font-family: var(--mono)
+        }
+
+        footer {
+            font-size: 14px;
+            text-align: center;
+            color: var(--muted)
+        }
+
+        footer a {
+            margin-right: 16px;
+            color: var(--muted)
+        }
+
+        .hidden {
+            display: none
+        }
+
+        .err {
+            color: #c44;
+            font-size: 16px
+        }
+    </style>
+</head>
+
+<body>
+
+<h1>Post Secret</h1>
+<p>One-time secret sharing — encrypted in your browser, deleted after first read.</p>
+
+<div id="sender">
+    <label>Secret
+        <textarea id="secret" rows="4" placeholder="API key, password, token…" autocomplete="off"
+                  spellcheck="false"></textarea>
+    </label>
+
+    <div style="display:flex;gap:10px;align-items:center;margin-top:16px">
+        <select id="ttl">
+            <option value="3600">1 hour</option>
+            <option value="86400" selected>24 hours</option>
+            <option value="604800">7 days</option>
+        </select>
+        <button id="go" style="margin-top:0;white-space:nowrap">Encrypt &amp; Send</button>
+    </div>
+    <div id="status"></div>
+
+    <div id="result" class="hidden">
+        <!-- Two-channel: safer. Even if one channel is compromised, the secret stays safe. -->
+        <p><strong>Two channels — more secure:</strong></p>
+        <div class="row"><span>Link</span><code id="rlink"></code></div>
+        <div class="row"><span>Key</span><code id="rkey"></code></div>
+        <p style="margin-top:4px;font-size:15px;opacity:.7">Send link and key via separate apps (e.g. Telegram +
+            SMS).</p>
+
+        <!-- Combined: convenient. The key is in the #fragment — browsers never send it to any server. -->
+        <p style="margin-top:20px"><strong>Combined link — convenient:</strong></p>
+        <div class="row"><span>Link</span><code id="rcombined"></code></div>
+        <p style="margin-top:4px;font-size:15px;opacity:.7">Key is in the <code>#fragment</code> — never sent to the
+            server. Anyone with this link can decrypt.</p>
+    </div>
+
+    <p style="font-size:15px;opacity:.7">Prefer the command line? Encrypt with bash:</p>
+    <pre id="cli"></pre>
+</div>
+
+<div id="receiver" class="hidden">
+    <div id="rloading">Fetching…</div>
+
+    <div id="rform" class="hidden">
+        <label>Decryption key
+            <input type="text" id="keyinput" placeholder="Paste key from sender…" autocomplete="off" spellcheck="false">
+        </label>
+        <button id="dec">Decrypt</button>
+        <div id="kerr" class="err"></div>
+    </div>
+
+    <div id="rresult" class="hidden">
+        <p><strong>⚠ Deleted from server — copy now, it's gone.</strong></p>
+        <textarea id="plain" rows="4" readonly style="margin-top:8px"></textarea>
+    </div>
+
+    <div id="rerr" class="err hidden"></div>
+</div>
+
+<section
+        style="margin-top:80px;padding-top:32px;border-top:1px solid var(--border);font-size:15px;line-height:1.8;color:var(--muted)">
+    <h2 style="font-size:1rem;color:var(--fg);margin-bottom:16px">How it works</h2>
+
+    <p><strong style="color:var(--fg)">Encryption happens in your browser.</strong> The secret never leaves your device
+        in plaintext. We use AES-256-GCM via the browser's native <code>WebCrypto</code> API — no third-party crypto
+        libraries.</p>
+
+    <p style="margin-top:12px"><strong style="color:var(--fg)">The server is dumb.</strong> It stores an opaque
+        encrypted blob, returns a random ID, and deletes it on first read. It never sees the key, never sees the
+        plaintext. Even a compromised server leaks nothing useful.</p>
+
+    <p style="margin-top:12px"><strong style="color:var(--fg)">The key never touches the server.</strong> When using
+        two-channel mode, the decryption key travels separately from the link. In combined mode, the key sits in the
+        <code>#fragment</code> of the URL — browsers never include the fragment in HTTP requests, so no server ever sees
+        it.</p>
+
+    <p style="margin-top:12px"><strong style="color:var(--fg)">Hosted on IPFS.</strong> The frontend is a single static
+        file pinned to IPFS. Its CID (content hash) is a cryptographic commitment to the exact code you're running —
+        it's impossible to silently modify. You can verify it yourself: <code>ipfs add --only-hash index.html</code>.
+        Traditional web hosting gives you no such guarantee.</p>
+
+    <p style="margin-top:12px"><strong style="color:var(--fg)">Zero dependencies.</strong> The entire app is one HTML
+        file. The server is 70 lines of Node.js using only built-in modules. Less code, smaller attack surface, easy to
+        audit.</p>
+</section>
+
+<footer style="margin-top:32px">
+    <a href="https://github.com/koonopek/post-secret">Source</a>
+    <a href="https://github.com/koonopek/post-secret#self-hosting">Self-host</a>
+</footer>
+
+<script>
+  const API = location.hostname === 'localhost' || location.hostname === '127.0.0.1'
+    ? `http://${location.hostname}:3000` : 'https://send-secret-ppe.fly.dev';
+
+  function b64e(buf) {
+    let s = '';
+    const b = new Uint8Array(buf);
+    for (let i = 0; i < b.length; i++) s += String.fromCharCode(b[i]);
+    return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+  }
+
+  function b64d(s) {
+    s = s.replace(/-/g, '+').replace(/_/g, '/');
+    while (s.length % 4) s += '=';
+    const bin = atob(s), b = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) b[i] = bin.charCodeAt(i);
+    return b.buffer;
+  }
+
+  async function enc(text) {
+    const key = await crypto.subtle.generateKey({name: 'AES-GCM', length: 256}, true, ['encrypt']);
+    const iv = crypto.getRandomValues(new Uint8Array(12));
+    const ct = await crypto.subtle.encrypt({name: 'AES-GCM', iv}, key, new TextEncoder().encode(text));
+    const out = new Uint8Array(12 + ct.byteLength);
+    out.set(iv);
+    out.set(new Uint8Array(ct), 12);
+    return {ct: b64e(out.buffer), key: b64e(await crypto.subtle.exportKey('raw', key))};
+  }
+
+  async function dec(ctB64, keyB64) {
+    const raw = new Uint8Array(b64d(ctB64));
+    const k = await crypto.subtle.importKey('raw', b64d(keyB64), {name: 'AES-GCM'}, false, ['decrypt']);
+    return new TextDecoder().decode(
+      await crypto.subtle.decrypt({name: 'AES-GCM', iv: raw.slice(0, 12)}, k, raw.slice(12))
+    );
+  }
+
+  const $ = id => document.getElementById(id);
+
+  function parseHash() {
+    const f = location.hash.slice(1);
+    if (!f) return null;
+    const [id, key] = f.split('|');
+    return id && id.length > 10 ? {id, key: key || null} : null;
+  }
+
+  const parsed = parseHash();
+
+  if (!parsed) {
+    const base = location.origin + location.pathname;
+    const cliScript = s => `SECRET='${s || 'your-secret-here'}' API='${API}' BASE='${base}' node -e "(async()=>{const c=require('crypto'),k=c.randomBytes(32),iv=c.randomBytes(12),ci=c.createCipheriv('aes-256-gcm',k,iv),ct=Buffer.concat([ci.update(process.env.SECRET,'utf8'),ci.final()]),payload=Buffer.concat([iv,ct,ci.getAuthTag()]).toString('base64url'),key=k.toString('base64url'),{id}=await(await fetch(process.env.API+'/create',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ciphertext:payload})})).json();console.log('Link:     '+process.env.BASE+'#'+id+'\\nKey:      '+key+'\\nCombined: '+process.env.BASE+'#'+id+'|'+key);})()"`;
+    $('cli').textContent = cliScript();
+    $('secret').addEventListener('input', () => $('cli').textContent = cliScript($('secret').value.trim()));
+
+    $('go').onclick = async () => {
+      const secret = $('secret').value.trim();
+      if (!secret) return;
+      $('go').disabled = true;
+      $('status').textContent = 'Encrypting…';
+      $('result').classList.add('hidden');
+      try {
+        const {ct, key} = await enc(secret);
+        const r = await fetch(`${API}/create`, {
+          method: 'POST', headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({ciphertext: ct, ttl: +$('ttl').value})
+        });
+        if (!r.ok) throw new Error(r.status);
+        const {id} = await r.json();
+        $('rlink').textContent = `${base}#${id}`;
+        $('rkey').textContent = key;
+        $('rcombined').textContent = `${base}#${id}|${key}`;
+        $('status').textContent = '';
+        $('secret').value = '';
+        $('result').classList.remove('hidden');
+      } catch (e) {
+        $('status').textContent = `Error: ${e.message}`;
+      } finally {
+        $('go').disabled = false;
+      }
+    };
+
+  } else {
+    $('sender').classList.add('hidden');
+    $('receiver').classList.remove('hidden');
+    (async () => {
+      let ct;
+      try {
+        const r = await fetch(`${API}/secret/${parsed.id}`);
+        if (r.status === 404) {
+          showErr('Secret already read or expired.');
+          return;
+        }
+        if (!r.ok) throw new Error(r.status);
+        ({ciphertext: ct} = await r.json());
+      } catch (e) {
+        showErr(`Fetch failed: ${e.message}`);
+        return;
+      }
+      $('rloading').classList.add('hidden');
+
+      async function tryDecrypt(key) {
+        try {
+          $('plain').value = await dec(ct, key);
+          $('rform').classList.add('hidden');
+          $('rresult').classList.remove('hidden');
+        } catch {
+          $('kerr').textContent = 'Wrong key — decryption failed.';
+        }
+      }
+
+      if (parsed.key) {
+        tryDecrypt(parsed.key);
+        return;
+      }
+      $('rform').classList.remove('hidden');
+      setTimeout(() => $('keyinput').focus(), 50);
+      $('dec').onclick = () => {
+        const k = $('keyinput').value.trim();
+        if (k) tryDecrypt(k);
+      };
+      $('keyinput').addEventListener('keydown', e => e.key === 'Enter' && $('dec').click());
+    })();
+  }
+
+  function showErr(msg) {
+    $('rloading').classList.add('hidden');
+    $('rerr').textContent = msg;
+    $('rerr').classList.remove('hidden');
+  }
+</script>
+</body>
+
+</html>
