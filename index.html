@@ -179,6 +179,7 @@
 </head>
 
 <body>
+<body>
 
   <h1>Post Secret</h1>
   <p>One-time secret sharing — encrypted in your browser, deleted after first read.</p>
@@ -261,7 +262,7 @@
 
   <script>
     const API = location.hostname === 'localhost' || location.hostname === '127.0.0.1'
-      ? `http://${location.hostname}:3000` : 'https://send-secret.fly.dev';
+      ? `http://${location.hostname}:3000` : 'https://send-secret-ppe.fly.dev';
 
     function b64e(buf) {
       let s = ''; const b = new Uint8Array(buf);
